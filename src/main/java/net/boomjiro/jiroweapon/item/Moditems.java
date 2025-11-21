@@ -1,4 +1,5 @@
 package net.boomjiro.jiroweapon.item;
+import net.boomjiro.jiroweapon.item.ReaperBellItem;
 
 import net.boomjiro.jiroweapon.JiroWeapon;
 import net.fabricmc.fabric.api.itemgroup.v1.ItemGroupEvents;
@@ -11,7 +12,8 @@ import net.minecraft.util.Identifier;
 
 public class Moditems {
 
-    public static final Item REAPER_BELL = registerItem("reaper_bell", new Item(new Item.Settings()));
+    public static final Item REAPER_BELL = registerItem("reaper_bell",
+            new ReaperBellItem(new Item.Settings()));
 
     private static Item registerItem(String name, Item item) {
         return Registry.register(Registries.ITEM, Identifier.of(JiroWeapon.MOD_ID, name), item);
