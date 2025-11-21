@@ -15,6 +15,9 @@ import net.minecraft.util.math.Vec3d;
 
 public class ReaperSkullProjectileEntity extends ThrownItemEntity {
 
+    private float initialYaw = 0f;
+    private float initialPitch = 0f;
+
     public ReaperSkullProjectileEntity(EntityType<? extends ReaperSkullProjectileEntity> type, World world) {
         super(type, world);
     }
@@ -28,6 +31,19 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
     public ReaperSkullProjectileEntity(World world, LivingEntity owner) {
         super(ModEntities.REAPER_SKULL, owner, world);
     }
+
+    // ✔ NEW: constructor that stores yaw/pitch
+    public ReaperSkullProjectileEntity(World world, LivingEntity owner, float yaw, float pitch) {
+        super(ModEntities.REAPER_SKULL, owner, world);
+        this.initialYaw = yaw;
+        this.initialPitch = pitch;
+        this.setYaw(yaw);
+        this.setPitch(pitch);
+    }
+
+    // ✔ Getters for renderer
+    public float getInitialYaw() { return initialYaw; }
+    public float getInitialPitch() { return initialPitch; }
 
     @Override
     protected Item getDefaultItem() {
@@ -66,7 +82,7 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
     public void tick() {
         super.tick();
 
-        // Extra collision check so it doesn't "slip under" mobs
+        // Extra collision check
         if (!this.getWorld().isClient) {
             HitResult hit = ProjectileUtil.getCollision(this, this::canHit);
             if (hit != null && hit.getType() != HitResult.Type.MISS) {
@@ -74,6 +90,7 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
             }
         }
 
+        // Particles
         if (this.getWorld().isClient) {
             Vec3d vel = this.getVelocity();
             double x = getX();

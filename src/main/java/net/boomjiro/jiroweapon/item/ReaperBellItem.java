@@ -17,7 +17,6 @@ import net.minecraft.particle.ParticleTypes;
 
 public class ReaperBellItem extends Item {
 
-    // Charge & cooldown tuning
     private static final int MAX_USE_TIME = 40;        // 2 seconds max charge
     private static final int CHARGE_THRESHOLD = 10;    // 0.5s to trigger circle
     private static final int COOLDOWN_TICKS = 100;     // 5 seconds
@@ -38,11 +37,21 @@ public class ReaperBellItem extends Item {
 
         // Normal right-click = fire skull projectile
         if (!world.isClient) {
-            ReaperSkullProjectileEntity proj =
-                    new ReaperSkullProjectileEntity(ModEntities.REAPER_SKULL, world, user);
 
-            // Launch forward
-            proj.setVelocity(user, user.getPitch(), user.getYaw(), 0.0F, 0.75F, 1.0F);
+            // ✔ NEW: create projectile with stored yaw/pitch
+            ReaperSkullProjectileEntity proj =
+                    new ReaperSkullProjectileEntity(world, user, user.getYaw(), user.getPitch());
+
+            // ✔ Proper velocity using player's rotation
+            proj.setVelocity(
+                    user,
+                    user.getPitch(),
+                    user.getYaw(),
+                    0.0F,   // roll
+                    1.5F,   // speed
+                    0.0F    // inaccuracy
+            );
+
             world.spawnEntity(proj);
 
             // Release sound
@@ -68,21 +77,20 @@ public class ReaperBellItem extends Item {
 
     @Override
     public UseAction getUseAction(ItemStack stack) {
-        // Bow-like charge animation while sneaking + holding
-        return UseAction.BOW;
+        return UseAction.BOW; // bow animation for charging
     }
 
     @Override
     public void usageTick(World world, LivingEntity user, ItemStack stack, int remainingUseTicks) {
         int usedTicks = MAX_USE_TIME - remainingUseTicks;
 
-        // Client-side charge particles when sneaking and holding
+        // Client-side charging VFX
         if (world.isClient && user.isSneaking()) {
             double x = user.getX();
             double y = user.getY();
             double z = user.getZ();
 
-            // Ring at feet
+            // Ring particles
             for (int i = 0; i < 6; i++) {
                 double angle = (world.getRandom().nextDouble() * Math.PI * 2);
                 double radius = 0.8 + world.getRandom().nextDouble() * 0.4;
@@ -102,7 +110,7 @@ public class ReaperBellItem extends Item {
                         0.0, 0.01, 0.0);
             }
 
-            // Tiny rising soul in center
+            // Center soul
             world.addParticle(ParticleTypes.SOUL,
                     x,
                     y + 0.3,
@@ -112,7 +120,7 @@ public class ReaperBellItem extends Item {
                     0.0);
         }
 
-        // First tick of charging: play charge sound
+        // FIRST tick of charging → sound
         if (!world.isClient && remainingUseTicks == MAX_USE_TIME - 1 && user instanceof PlayerEntity player) {
             world.playSound(
                     null,
@@ -124,7 +132,7 @@ public class ReaperBellItem extends Item {
             );
         }
 
-        // Server: trigger circle immediately when threshold reached
+        // ✔ Server: summon ritual circle after threshold ticks
         if (!world.isClient && user.isSneaking() && usedTicks == CHARGE_THRESHOLD && user instanceof PlayerEntity player) {
 
             RitualCircleEntity circle = new RitualCircleEntity(ModEntities.RITUAL_CIRCLE, world);
@@ -142,7 +150,7 @@ public class ReaperBellItem extends Item {
             );
 
             player.getItemCooldownManager().set(this, COOLDOWN_TICKS);
-            player.stopUsingItem(); // prevent "reset" bug
+            player.stopUsingItem(); // prevents animation reset loop
         }
     }
 }

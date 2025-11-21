@@ -56,6 +56,12 @@ public class RitualCircleEntity extends Entity {
     public void tick() {
         super.tick();
 
+        // 🔹 BIG bounding box so the circle keeps rendering from farther away
+        this.setBoundingBox(new Box(
+                getX() - RADIUS, getY() - 2, getZ() - RADIUS,
+                getX() + RADIUS, getY() + 2, getZ() + RADIUS
+        ));
+
         if (this.age >= DURATION_TICKS) {
             this.discard();
             return;

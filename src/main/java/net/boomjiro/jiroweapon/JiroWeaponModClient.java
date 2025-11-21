@@ -1,9 +1,11 @@
 package net.boomjiro.jiroweapon;
 
 import org.joml.Matrix4f;
+
 import net.boomjiro.jiroweapon.entity.ModEntities;
 import net.boomjiro.jiroweapon.entity.ReaperSkullProjectileEntity;
 import net.boomjiro.jiroweapon.entity.RitualCircleEntity;
+
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.rendering.v1.EntityRendererRegistry;
 
@@ -14,14 +16,13 @@ import net.minecraft.client.render.VertexConsumerProvider;
 import net.minecraft.client.render.entity.EntityRenderer;
 import net.minecraft.client.render.entity.EntityRendererFactory;
 import net.minecraft.client.render.item.ItemRenderer;
-import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.render.model.json.ModelTransformationMode;
+import net.minecraft.client.util.math.MatrixStack;
 
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.RotationAxis;
-import net.minecraft.util.math.Vec3d;
 
 public class JiroWeaponModClient implements ClientModInitializer {
 
@@ -35,7 +36,7 @@ public class JiroWeaponModClient implements ClientModInitializer {
     }
 
     // ==========================================================
-    //  REAPER SKULL RENDERER (WORKING VERSION)
+    //  REAPER SKULL RENDERER (SNAPPED 8-DIRECTION SYSTEM)
     // ==========================================================
     public static class ReaperSkullRenderer extends EntityRenderer<ReaperSkullProjectileEntity> {
 
@@ -48,6 +49,7 @@ public class JiroWeaponModClient implements ClientModInitializer {
 
         @Override
         public Identifier getTexture(ReaperSkullProjectileEntity entity) {
+            // Not actually used for item rendering, but required by superclass
             return Identifier.of("minecraft", "textures/entity/skeleton/skeleton.png");
         }
 
@@ -57,35 +59,44 @@ public class JiroWeaponModClient implements ClientModInitializer {
 
             matrices.push();
 
-            Vec3d vel = entity.getVelocity();
+            // ------------------------------------------------------
+            // Grab entity yaw/pitch
+            // ------------------------------------------------------
+            float rawYaw   = entity.getYaw();   // Minecraft yaw (weird, can be negative)
+            float pitchDeg = entity.getPitch(); // standard pitch
 
-            //--------------------------------------------
-            // Correct rotation (vanilla projectile logic)
-            //--------------------------------------------
-            if (vel.lengthSquared() > 1.0E-4) {
+            // Normalize yaw to [0, 360)
+            float yaw360 = (rawYaw % 360f + 360f) % 360f;
 
-                float yawVel =
-                        (float) Math.toDegrees(Math.atan2(vel.x, vel.z));
+            // Snap to nearest 45° (N, NE, E, SE, S, SW, W, NW)
+            float snappedYaw = Math.round(yaw360 / 45f) * 45f;
 
-                float pitchVel =
-                        (float) Math.toDegrees(Math.atan2(vel.y, vel.horizontalLength()));
+            // ------------------------------------------------------
+            // Fix skull item base orientation
+            // (skull item lies on its back and faces odd direction)
+            // ------------------------------------------------------
+            // ======== BASE ITEM FIX (100% accurate to placed skull) ========
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90f));
+            matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180f));
 
-                matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-yawVel));
-                matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchVel));
-            }
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-snappedYaw));
 
-            // Bobbing
+            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchDeg));
+
+            // Small bobbing effect so it feels "alive"
             float age = entity.age + tickDelta;
             float bob = (float) Math.sin(age * 0.2f) * 0.1f;
             matrices.translate(0.0, 0.1 + bob, 0.0);
 
+            // Scale a bit bigger than a normal item
             matrices.scale(1.3f, 1.3f, 1.3f);
 
             ItemStack skull = new ItemStack(Items.SKELETON_SKULL);
 
+            // Use FIXED so we don't get weird hand/ground transforms
             itemRenderer.renderItem(
                     skull,
-                    ModelTransformationMode.GROUND,
+                    ModelTransformationMode.FIXED,
                     light,
                     OverlayTexture.DEFAULT_UV,
                     matrices,
@@ -99,7 +110,7 @@ public class JiroWeaponModClient implements ClientModInitializer {
     }
 
     // ==========================================================
-    //  RITUAL CIRCLE RENDERER (WORKING VERSION)
+    //  RITUAL CIRCLE RENDERER (your version, kept intact)
     // ==========================================================
     public static class RitualCircleRenderer extends EntityRenderer<RitualCircleEntity> {
 
@@ -117,7 +128,7 @@ public class JiroWeaponModClient implements ClientModInitializer {
 
             float age = entity.age + tickDelta;
 
-            // Correct ground orientation
+            // Your current rotation setup
             matrices.translate(0.0, 0.02, 0.0);
             matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-180f));
             matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(age * 2f));
