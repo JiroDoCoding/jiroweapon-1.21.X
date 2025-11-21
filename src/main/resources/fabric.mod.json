@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "jiroweapon",
+	"version": "${version}",
+	"name": "JiroWeapon",
+	"description": "Making weapon Mod",
+	"authors": [
+		"Boomjiro"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/jiroweapon/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"net.boomjiro.jiroweapon.JiroWeapon"
+		],
+		"fabric-datagen": [
+			"net.boomjiro.jiroweapon.JiroWeaponDataGenerator"
+		],
+        "client": [
+          "net.boomjiro.jiroweapon.JiroWeaponModClient"
+        ]
+	},
+	"mixins": [
+		"jiroweapon.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.18.1",
+		"minecraft": "~1.21",
+		"java": ">=21",
+		"fabric-api": "*"
+	},
+	"suggests": {
+		"another-mod": "*"
+	}
+}
