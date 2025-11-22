@@ -22,12 +22,16 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.Identifier;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.RotationAxis;
 
 public class JiroWeaponModClient implements ClientModInitializer {
 
     private static final Identifier RITUAL_TEXTURE =
             Identifier.of(JiroWeapon.MOD_ID, "textures/entity/reaper_circle.png");
+
+    private static final Identifier REAPER_CROSS_TEXTURE =
+            Identifier.of(JiroWeapon.MOD_ID, "textures/entity/reaper_cross.png");
 
     @Override
     public void onInitializeClient() {
@@ -36,7 +40,7 @@ public class JiroWeaponModClient implements ClientModInitializer {
     }
 
     // ==========================================================
-    //  REAPER SKULL RENDERER (SNAPPED 8-DIRECTION SYSTEM)
+    //  REAPER SKULL RENDERER – follow entity's yaw/pitch
     // ==========================================================
     public static class ReaperSkullRenderer extends EntityRenderer<ReaperSkullProjectileEntity> {
 
@@ -49,51 +53,33 @@ public class JiroWeaponModClient implements ClientModInitializer {
 
         @Override
         public Identifier getTexture(ReaperSkullProjectileEntity entity) {
-            // Not actually used for item rendering, but required by superclass
             return Identifier.of("minecraft", "textures/entity/skeleton/skeleton.png");
         }
 
         @Override
-        public void render(ReaperSkullProjectileEntity entity, float yaw, float tickDelta,
+        public void render(ReaperSkullProjectileEntity entity, float unusedYaw, float tickDelta,
                            MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
 
             matrices.push();
 
-            // ------------------------------------------------------
-            // Grab entity yaw/pitch
-            // ------------------------------------------------------
-            float rawYaw   = entity.getYaw();   // Minecraft yaw (weird, can be negative)
-            float pitchDeg = entity.getPitch(); // standard pitch
+            // Interpolated rotation from the entity
+            float yaw   = MathHelper.lerp(tickDelta, entity.prevYaw, entity.getYaw());
+            float pitch = MathHelper.lerp(tickDelta, entity.prevPitch, entity.getPitch());
 
-            // Normalize yaw to [0, 360)
-            float yaw360 = (rawYaw % 360f + 360f) % 360f;
-
-            // Snap to nearest 45° (N, NE, E, SE, S, SW, W, NW)
-            float snappedYaw = Math.round(yaw360 / 45f) * 45f;
-
-            // ------------------------------------------------------
-            // Fix skull item base orientation
-            // (skull item lies on its back and faces odd direction)
-            // ------------------------------------------------------
-            // ======== BASE ITEM FIX (100% accurate to placed skull) ========
-            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-90f));
-            matrices.multiply(RotationAxis.POSITIVE_Z.rotationDegrees(180f));
-
-            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(-snappedYaw));
-
-            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitchDeg));
-
-            // Small bobbing effect so it feels "alive"
+            // Small bobbing
             float age = entity.age + tickDelta;
             float bob = (float) Math.sin(age * 0.2f) * 0.1f;
             matrices.translate(0.0, 0.1 + bob, 0.0);
 
-            // Scale a bit bigger than a normal item
+            // Horizontal orientation (this already works for N/E/S/W)
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(yaw + 180.0f));
+
+            // Vertical orientation: flip sign so looking up makes it face away
+            matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(pitch));
+
             matrices.scale(1.3f, 1.3f, 1.3f);
 
             ItemStack skull = new ItemStack(Items.SKELETON_SKULL);
-
-            // Use FIXED so we don't get weird hand/ground transforms
             itemRenderer.renderItem(
                     skull,
                     ModelTransformationMode.FIXED,
@@ -109,9 +95,6 @@ public class JiroWeaponModClient implements ClientModInitializer {
         }
     }
 
-    // ==========================================================
-    //  RITUAL CIRCLE RENDERER (your version, kept intact)
-    // ==========================================================
     public static class RitualCircleRenderer extends EntityRenderer<RitualCircleEntity> {
 
         private static final float RADIUS = 8.0F;
@@ -124,11 +107,75 @@ public class JiroWeaponModClient implements ClientModInitializer {
         public void render(RitualCircleEntity entity, float yaw, float tickDelta,
                            MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light) {
 
+            float age = entity.age + tickDelta;
+            int glowLight = 0xF000F0;
+
+            int total = RitualCircleEntity.DURATION_TICKS;
+            int fadeTicks = 20;
+            float fadeFactor = 1.0f;
+            float timeLeft = total - age;
+
+            if (timeLeft <= fadeTicks) {
+                fadeFactor = Math.max(0.0f, timeLeft / fadeTicks);
+            }
+
+            int crossBaseAlpha = 255;
+            int circleBaseAlpha = 240;
+
+            int crossAlpha = (int) (crossBaseAlpha * fadeFactor);
+            int circleAlpha = (int) (circleBaseAlpha * fadeFactor);
+
+            if (crossAlpha <= 0 && circleAlpha <= 0) {
+                return;
+            }
+
             matrices.push();
 
-            float age = entity.age + tickDelta;
+            float crossHeight = 6.0f;
+            float crossWidth = 3.0f;
 
-            // Your current rotation setup
+            matrices.translate(0.0f, 5.0f, 0.0f);
+            matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(age * 1.5f));
+            matrices.scale(crossWidth, crossHeight, 1.0f);
+
+            MatrixStack.Entry crossEntry = matrices.peek();
+            Matrix4f crossMatrix = crossEntry.getPositionMatrix();
+
+            VertexConsumer crossVc =
+                    vertexConsumers.getBuffer(RenderLayer.getEntityTranslucent(REAPER_CROSS_TEXTURE));
+
+            crossVc.vertex(crossMatrix, -0.5f, -0.5f, 0.0f)
+                    .color(255, 255, 255, crossAlpha)
+                    .texture(0.0f, 0.0f)
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(glowLight)
+                    .normal(0f, 0f, -1f);
+
+            crossVc.vertex(crossMatrix, 0.5f, -0.5f, 0.0f)
+                    .color(255, 255, 255, crossAlpha)
+                    .texture(1.0f, 0.0f)
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(glowLight)
+                    .normal(0f, 0f, -1f);
+
+            crossVc.vertex(crossMatrix, 0.5f, 0.5f, 0.0f)
+                    .color(255, 255, 255, crossAlpha)
+                    .texture(1.0f, 1.0f)
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(glowLight)
+                    .normal(0f, 0f, -1f);
+
+            crossVc.vertex(crossMatrix, -0.5f, 0.5f, 0.0f)
+                    .color(255, 255, 255, crossAlpha)
+                    .texture(0.0f, 1.0f)
+                    .overlay(OverlayTexture.DEFAULT_UV)
+                    .light(glowLight)
+                    .normal(0f, 0f, -1f);
+
+            matrices.pop();
+
+            matrices.push();
+
             matrices.translate(0.0, 0.02, 0.0);
             matrices.multiply(RotationAxis.POSITIVE_X.rotationDegrees(-180f));
             matrices.multiply(RotationAxis.POSITIVE_Y.rotationDegrees(age * 2f));
@@ -142,34 +189,32 @@ public class JiroWeaponModClient implements ClientModInitializer {
             VertexConsumer vc =
                     vertexConsumers.getBuffer(RenderLayer.getEntityTranslucent(RITUAL_TEXTURE));
 
-            int alpha = 240;
-
             vc.vertex(matrix, -0.5f, 0.0f, -0.5f)
-                    .color(255, 255, 255, alpha)
+                    .color(255, 255, 255, circleAlpha)
                     .texture(0.0f, 0.0f)
                     .overlay(OverlayTexture.DEFAULT_UV)
-                    .light(light)
+                    .light(glowLight)
                     .normal(0f, 1f, 0f);
 
             vc.vertex(matrix, 0.5f, 0.0f, -0.5f)
-                    .color(255, 255, 255, alpha)
+                    .color(255, 255, 255, circleAlpha)
                     .texture(1.0f, 0.0f)
                     .overlay(OverlayTexture.DEFAULT_UV)
-                    .light(light)
+                    .light(glowLight)
                     .normal(0f, 1f, 0f);
 
             vc.vertex(matrix, 0.5f, 0.0f, 0.5f)
-                    .color(255, 255, 255, alpha)
+                    .color(255, 255, 255, circleAlpha)
                     .texture(1.0f, 1.0f)
                     .overlay(OverlayTexture.DEFAULT_UV)
-                    .light(light)
+                    .light(glowLight)
                     .normal(0f, 1f, 0f);
 
             vc.vertex(matrix, -0.5f, 0.0f, 0.5f)
-                    .color(255, 255, 255, alpha)
+                    .color(255, 255, 255, circleAlpha)
                     .texture(0.0f, 1.0f)
                     .overlay(OverlayTexture.DEFAULT_UV)
-                    .light(light)
+                    .light(glowLight)
                     .normal(0f, 1f, 0f);
 
             matrices.pop();
