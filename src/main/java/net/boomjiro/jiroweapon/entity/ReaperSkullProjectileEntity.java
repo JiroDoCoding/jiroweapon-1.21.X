@@ -9,14 +9,19 @@ import net.minecraft.entity.projectile.thrown.ThrownItemEntity;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.particle.ParticleTypes;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.EntityHitResult;
 import net.minecraft.util.hit.HitResult;
-import net.minecraft.world.World;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 
 public class ReaperSkullProjectileEntity extends ThrownItemEntity {
 
-    private float initialYaw = 0f;
-    private float initialPitch = 0f;
+    private float initialYaw;
+    private float initialPitch;
 
     public ReaperSkullProjectileEntity(EntityType<? extends ReaperSkullProjectileEntity> type, World world) {
         super(type, world);
@@ -66,8 +71,35 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
                 circle.setOwner(living);
             }
 
-            circle.refreshPositionAndAngles(this.getX(), this.getY(), this.getZ(), 0, 0);
+            double x = hitResult.getPos().x;
+            double y = hitResult.getPos().y;
+            double z = hitResult.getPos().z;
+
+            if (hitResult instanceof BlockHitResult blockHit) {
+                // Use the exact hit height, slightly above the hit face
+                y = blockHit.getPos().y + 0.02;
+            } else if (hitResult instanceof EntityHitResult entityHit) {
+                // Under the entity we hit (centered on them)
+                Entity target = entityHit.getEntity();
+                x = target.getX();
+                z = target.getZ();
+                y = target.getY() + 0.02;
+            } else {
+                // Fallback: use ray hit position slightly above
+                y = hitResult.getPos().y + 0.02;
+            }
+
+            circle.refreshPositionAndAngles(x, y, z, 0, 0);
             world.spawnEntity(circle);
+
+            world.playSound(
+                    null,
+                    x, y, z,
+                    SoundEvents.BLOCK_RESPAWN_ANCHOR_SET_SPAWN,
+                    SoundCategory.PLAYERS,
+                    0.9f,
+                    0.7f + world.random.nextFloat() * 0.3f
+            );
 
             this.discard();
         }
@@ -82,7 +114,22 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
     public void tick() {
         super.tick();
 
-        // Extra collision check
+        // Keep rotation aligned with current velocity (like arrows do)
+        Vec3d vel = this.getVelocity();
+        if (vel.lengthSquared() > 1.0E-4) {
+            double vx = vel.x;
+            double vy = vel.y;
+            double vz = vel.z;
+
+            float horiz = MathHelper.sqrt((float)(vx * vx + vz * vz));
+
+            float newYaw = (float)(MathHelper.atan2(vx, vz) * (180F / (float)Math.PI));
+            float newPitch = (float)(MathHelper.atan2(vy, horiz) * (180F / (float)Math.PI));
+
+            this.setYaw(newYaw);
+            this.setPitch(newPitch);
+        }
+
         if (!this.getWorld().isClient) {
             HitResult hit = ProjectileUtil.getCollision(this, this::canHit);
             if (hit != null && hit.getType() != HitResult.Type.MISS) {
@@ -90,38 +137,39 @@ public class ReaperSkullProjectileEntity extends ThrownItemEntity {
             }
         }
 
-        // Particles
         if (this.getWorld().isClient) {
-            Vec3d vel = this.getVelocity();
+            Vec3d velClient = this.getVelocity();
             double x = getX();
             double y = getY();
             double z = getZ();
 
-            // Core particles
             this.getWorld().addParticle(ParticleTypes.CRIMSON_SPORE, x, y, z, 0, 0, 0);
-            this.getWorld().addParticle(ParticleTypes.ASH,          x, y, z, 0, 0, 0);
+            this.getWorld().addParticle(ParticleTypes.ASH, x, y, z, 0, 0, 0);
 
-            // Trailing wisps
             int steps = 5;
             for (int i = 0; i < steps; i++) {
                 double t = (i / (double) steps) * 0.7;
-                double bx = x - vel.x * t;
-                double by = y - vel.y * t;
-                double bz = z - vel.z * t;
+                double bx = x - velClient.x * t;
+                double by = y - velClient.y * t;
+                double bz = z - velClient.z * t;
 
-                double spread = 0.02 + vel.length() * 0.05;
+                double spread = 0.02 + velClient.length() * 0.05;
 
-                this.getWorld().addParticle(ParticleTypes.CRIMSON_SPORE,
+                this.getWorld().addParticle(
+                        ParticleTypes.CRIMSON_SPORE,
                         bx, by, bz,
                         (random.nextDouble() - 0.5) * spread,
                         (random.nextDouble() - 0.5) * spread,
-                        (random.nextDouble() - 0.5) * spread);
+                        (random.nextDouble() - 0.5) * spread
+                );
 
-                this.getWorld().addParticle(ParticleTypes.ASH,
+                this.getWorld().addParticle(
+                        ParticleTypes.ASH,
                         bx, by, bz,
                         (random.nextDouble() - 0.5) * spread * 0.5,
                         (random.nextDouble() - 0.5) * spread * 0.5,
-                        (random.nextDouble() - 0.5) * spread * 0.5);
+                        (random.nextDouble() - 0.5) * spread * 0.5
+                );
             }
         }
     }

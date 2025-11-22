@@ -18,9 +18,9 @@ import net.minecraft.world.World;
 public class RitualCircleEntity extends Entity {
 
     public static final int RADIUS = 8;
-    private static final int DURATION_TICKS = 80;   // ~4 seconds
-    private static final int DAMAGE_INTERVAL = 20;  // once per second
-    private static final float DAMAGE_AMOUNT = 2.0F; // 1 heart
+    public static final int DURATION_TICKS = 80;
+    private static final int DAMAGE_INTERVAL = 20;
+    private static final float DAMAGE_AMOUNT = 2.0F;
 
     private UUID ownerUuid;
 
@@ -29,13 +29,17 @@ public class RitualCircleEntity extends Entity {
         this.noClip = true;
     }
 
+    @Override
+    public float getBrightnessAtEyes() {
+        return 1.0F;
+    }
+
     public void setOwner(LivingEntity owner) {
         this.ownerUuid = owner.getUuid();
     }
 
     @Override
     protected void initDataTracker(DataTracker.Builder builder) {
-        // no tracked data yet
     }
 
     @Override
@@ -56,10 +60,16 @@ public class RitualCircleEntity extends Entity {
     public void tick() {
         super.tick();
 
-        // 🔹 BIG bounding box so the circle keeps rendering from farther away
+        double cx = this.getX();
+        double cy = this.getY();
+        double cz = this.getZ();
+
+        double yMin = cy - 0.1;
+        double yMax = cy + 0.5;
+
         this.setBoundingBox(new Box(
-                getX() - RADIUS, getY() - 2, getZ() - RADIUS,
-                getX() + RADIUS, getY() + 2, getZ() + RADIUS
+                cx - RADIUS, yMin, cz - RADIUS,
+                cx + RADIUS, yMax, cz + RADIUS
         ));
 
         if (this.age >= DURATION_TICKS) {
@@ -69,7 +79,6 @@ public class RitualCircleEntity extends Entity {
 
         World world = this.getWorld();
 
-        // Client: a few ambient particles only (shape comes from renderer)
         if (world.isClient) {
             if (this.age < 5) {
                 spawnSpawnBurst(world);
@@ -78,7 +87,6 @@ public class RitualCircleEntity extends Entity {
             return;
         }
 
-        // Server: damage + lifesteal
         if (this.age % DAMAGE_INTERVAL == 0) {
             ServerWorld serverWorld = (ServerWorld) world;
             LivingEntity owner = null;
@@ -91,8 +99,8 @@ public class RitualCircleEntity extends Entity {
             }
 
             Box box = new Box(
-                    getX() - RADIUS, getY() - 1, getZ() - RADIUS,
-                    getX() + RADIUS, getY() + 3, getZ() + RADIUS
+                    cx - RADIUS, cy - 0.1, cz - RADIUS,
+                    cx + RADIUS, cy + 3.0, cz + RADIUS
             );
 
             List<LivingEntity> targets = world.getNonSpectatingEntities(LivingEntity.class, box);
@@ -119,8 +127,7 @@ public class RitualCircleEntity extends Entity {
         double cy = getY() + 0.1;
         double cz = getZ();
 
-        // A few souls rising from the circle
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < 6; i++) {
             double angle = world.random.nextDouble() * Math.PI * 2;
             double radius = 1.0 + world.random.nextDouble() * (RADIUS - 1.5);
             double dx = Math.cos(angle) * radius;
@@ -135,6 +142,110 @@ public class RitualCircleEntity extends Entity {
                     0.04,
                     0.0
             );
+        }
+
+        int ringPoints = 22;
+        double baseRadius = RADIUS - 1.0;
+        double t = (this.age % 40) / 40.0;
+
+        for (int i = 0; i < ringPoints; i++) {
+            double angle = (2 * Math.PI * i / ringPoints) + t * 2 * Math.PI;
+            double radius = baseRadius + world.random.nextDouble() * 0.5;
+            double dx = Math.cos(angle) * radius;
+            double dz = Math.sin(angle) * radius;
+
+            double px = cx + dx;
+            double py = cy + 0.15 + world.random.nextDouble() * 0.1;
+            double pz = cz + dz;
+
+            world.addParticle(
+                    ParticleTypes.CRIMSON_SPORE,
+                    px, py, pz,
+                    (world.random.nextDouble() - 0.5) * 0.01,
+                    0.02 + world.random.nextDouble() * 0.02,
+                    (world.random.nextDouble() - 0.5) * 0.01
+            );
+
+            world.addParticle(
+                    ParticleTypes.ASH,
+                    px, py + 0.05, pz,
+                    0.0,
+                    0.01,
+                    0.0
+            );
+        }
+
+        double crossBaseY = getY() + 2.5;
+        double verticalHalf = RADIUS * 0.9;
+        double horizontalHalf = RADIUS * 0.6;
+        double thickness = 0.3;
+
+        int verticalSteps = 24;
+        int horizontalSteps = 18;
+
+        double topY = crossBaseY - verticalHalf * 0.3;
+        double bottomY = crossBaseY + verticalHalf;
+
+        for (int i = 0; i <= verticalSteps; i++) {
+            double f = i / (double) verticalSteps;
+            double py = topY + (bottomY - topY) * f;
+
+            double ox = (world.random.nextDouble() - 0.5) * thickness;
+            double oz = (world.random.nextDouble() - 0.5) * thickness;
+
+            world.addParticle(
+                    ParticleTypes.CRIMSON_SPORE,
+                    cx + ox,
+                    py,
+                    cz + oz,
+                    0.0,
+                    0.01,
+                    0.0
+            );
+
+            if (world.random.nextFloat() < 0.25f) {
+                world.addParticle(
+                        ParticleTypes.ASH,
+                        cx + ox * 0.8,
+                        py + 0.05,
+                        cz + oz * 0.8,
+                        0.0,
+                        0.005,
+                        0.0
+                );
+            }
+        }
+
+        double barY = topY + (bottomY - topY) * 0.35;
+
+        for (int i = 0; i <= horizontalSteps; i++) {
+            double f = i / (double) horizontalSteps;
+            double x = cx - horizontalHalf + 2 * horizontalHalf * f;
+
+            double ox = (world.random.nextDouble() - 0.5) * thickness * 0.6;
+            double oz = (world.random.nextDouble() - 0.5) * thickness * 0.6;
+
+            world.addParticle(
+                    ParticleTypes.CRIMSON_SPORE,
+                    x + ox,
+                    barY,
+                    cz + oz,
+                    0.0,
+                    0.01,
+                    0.0
+            );
+
+            if (world.random.nextFloat() < 0.25f) {
+                world.addParticle(
+                        ParticleTypes.ASH,
+                        x + ox * 0.8,
+                        barY + 0.05,
+                        cz + oz * 0.8,
+                        0.0,
+                        0.005,
+                        0.0
+                );
+            }
         }
     }
 
